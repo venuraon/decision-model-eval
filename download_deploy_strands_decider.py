@@ -14,7 +14,8 @@ import shutil
 import subprocess
 import sys
 import time
-from urllib.request import urlopen
+import json
+from urllib.request import Request, urlopen
 from pathlib import Path
 
 
@@ -69,6 +70,11 @@ def parse_args() -> argparse.Namespace:
         "--health-check",
         action="store_true",
         help="Start the server, wait for /health, then exit.",
+    )
+    parser.add_argument(
+        "--smoke-test",
+        action="store_true",
+        help="Start the server, run one example routing decision, then exit.",
     )
     return parser.parse_args()
 
@@ -134,6 +140,8 @@ def main() -> int:
         # health-check branch terminates it after the checkpoint is loaded,
         # leaving the downloaded weights in the configured cache.
         args.health_check = True
+    if args.smoke_test:
+        args.health_check = True
 
     if not args.health_check:
         return subprocess.call(command, env=env)
@@ -148,6 +156,38 @@ def main() -> int:
                 with urlopen(health_url, timeout=2) as response:
                     if response.status == 200:
                         print(f"Health check passed: {health_url}")
+                        if args.smoke_test:
+                            payload = {
+                                "state": (
+                                    "Service/form: Phone\n"
+                                    "Method: Wireless\n"
+                                    "Call or message type: Text Message"
+                                ),
+                                "questions": {
+                                    "queue": {
+                                        "type": "choice",
+                                        "instructions": "Which queue should own this complaint?",
+                                        "criteria": {
+                                            "billing_and_charges": "Charges, fees, or bills.",
+                                            "fraud_or_unwanted_contact": (
+                                                "Robocalls, spoofing, telemarketing, or unwanted messages."
+                                            ),
+                                            "human_review_or_other": "Anything else or ambiguous.",
+                                        },
+                                    }
+                                },
+                            }
+                            request = Request(
+                                f"http://127.0.0.1:{args.port}/v1/systemone",
+                                data=json.dumps(payload).encode("utf-8"),
+                                headers={"Content-Type": "application/json"},
+                                method="POST",
+                            )
+                            with urlopen(request, timeout=120) as test_response:
+                                result = json.loads(test_response.read().decode("utf-8"))
+                            answer = result.get("answers", {}).get("queue", {})
+                            print("Smoke-test response:")
+                            print(json.dumps(answer, indent=2))
                         return 0
             except Exception:
                 time.sleep(1)

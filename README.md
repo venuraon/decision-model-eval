@@ -27,6 +27,13 @@ python download_deploy_strands_decider.py
 
 The service listens on `http://127.0.0.1:8000`.
 
+To download, start, and verify one real routing decision without leaving the
+server running:
+
+```bash
+python download_deploy_strands_decider.py --smoke-test
+```
+
 ## Prepare FCC input
 
 ```bash
